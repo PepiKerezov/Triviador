@@ -1,0 +1,1 @@
+TESTS_PACKAGE = True
