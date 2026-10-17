@@ -170,3 +170,88 @@ class RoundAnswer(models.Model):
 			self.numeric_value is None or self.selected_option_id is not None
 		):
 			raise ValidationError('A numeric answer must use exactly one numeric value.')
+
+
+class Territory(models.Model):
+	game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='territories')
+	name = models.CharField(max_length=100)
+	slug = models.SlugField(max_length=100, allow_unicode=True)
+	owner = models.ForeignKey(
+		GamePlayer,
+		null=True,
+		blank=True,
+		on_delete=models.PROTECT,
+		related_name='territories',
+	)
+	score = models.PositiveIntegerField(default=0)
+	neighbors = models.ManyToManyField('self', symmetrical=True, blank=True)
+
+	class Meta:
+		constraints = [
+			models.UniqueConstraint(fields=('game', 'name'), name='unique_territory_name_per_game'),
+			models.UniqueConstraint(fields=('game', 'slug'), name='unique_territory_slug_per_game'),
+		]
+
+	def clean(self):
+		super().clean()
+		self.name = self.name.strip()
+		self.slug = self.slug.strip().lower()
+		if not self.name:
+			raise ValidationError({'name': 'Territory name cannot be blank.'})
+		if not self.slug:
+			raise ValidationError({'slug': 'Territory slug cannot be blank.'})
+		if self.owner_id and self.game_id and self.owner.game_id != self.game_id:
+			raise ValidationError({'owner': 'Territory owner must belong to the same game.'})
+
+	def save(self, *args, **kwargs):
+		self.full_clean()
+		return super().save(*args, **kwargs)
+
+	def set_neighbors(self, neighbors):
+		neighbors = list(neighbors)
+		if any(neighbor.pk == self.pk for neighbor in neighbors):
+			raise ValidationError('A territory cannot be its own neighbor.')
+		if any(neighbor.game_id != self.game_id for neighbor in neighbors):
+			raise ValidationError('Territory neighbors must belong to the same game.')
+		if len({neighbor.pk for neighbor in neighbors}) != len(neighbors):
+			raise ValidationError('A territory cannot have duplicate neighbors.')
+		if len(neighbors) < 2:
+			raise ValidationError('A territory must have at least two neighbors.')
+		self.neighbors.set(neighbors)
+
+	def __str__(self):
+		return self.name
+
+
+class Capital(models.Model):
+	territory = models.OneToOneField(
+		Territory,
+		on_delete=models.PROTECT,
+		related_name='capital',
+	)
+	player = models.OneToOneField(
+		GamePlayer,
+		on_delete=models.PROTECT,
+		related_name='capital',
+	)
+	health = models.PositiveSmallIntegerField(default=3)
+
+	class Meta:
+		constraints = [
+			models.CheckConstraint(
+				condition=models.Q(health__gte=0, health__lte=3),
+				name='capital_health_between_zero_and_three',
+			),
+		]
+
+	def clean(self):
+		super().clean()
+		if self.territory_id and self.player_id:
+			if self.territory.game_id != self.player.game_id:
+				raise ValidationError('Capital territory and player must belong to the same game.')
+			if self.territory.owner_id != self.player_id:
+				raise ValidationError('Capital territory must be owned by its player.')
+
+	def save(self, *args, **kwargs):
+		self.full_clean()
+		return super().save(*args, **kwargs)
