@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Game, GamePlayer, Round, RoundAnswer
+from .models import Capital, Game, GamePlayer, Round, RoundAnswer, Territory
 
 
 @admin.register(Game)
@@ -25,3 +25,38 @@ class RoundAdmin(admin.ModelAdmin):
 class RoundAnswerAdmin(admin.ModelAdmin):
 	list_display = ('round', 'player', 'is_correct', 'points_awarded', 'submitted_at')
 	list_filter = ('is_correct',)
+
+
+@admin.register(Territory)
+class TerritoryAdmin(admin.ModelAdmin):
+	list_display = ('game', 'name', 'slug', 'owner', 'score', 'neighbor_list')
+	search_fields = ('name', 'slug')
+	list_filter = ('game', 'owner')
+	readonly_fields = ('game', 'name', 'slug', 'owner', 'neighbors')
+	fields = ('game', 'name', 'slug', 'owner', 'score', 'neighbors')
+
+	def neighbor_list(self, obj):
+		return ', '.join(neighbor.name for neighbor in obj.neighbors.all())
+
+	neighbor_list.short_description = 'Neighbors'
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+
+@admin.register(Capital)
+class CapitalAdmin(admin.ModelAdmin):
+	list_display = ('player', 'territory', 'health')
+	search_fields = ('player__user__username', 'territory__name')
+	list_filter = ('territory__game',)
+	readonly_fields = ('player', 'territory')
+	fields = ('player', 'territory', 'health')
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
