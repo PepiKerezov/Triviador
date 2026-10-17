@@ -56,3 +56,28 @@ the related object and is never created by a read.
 The admin lists territories and capitals but cannot add or delete them or
 edit their structural fields and relationships. Territory score and capital
 health remain editable and are validated by the models.
+
+## M05: Game initialization
+
+The explicit backend operation is `games.services.initialize_game(game_id)`.
+It returns `InitializationResult` on success and raises
+`GameInitializationError` on refusal; its `code` identifies the reason:
+`game_not_found`, `invalid_status`, `invalid_players`, `existing_state`,
+`no_capital_triple`, or `concurrent_access`.
+
+The operation locks the waiting game with `select_for_update()` and runs in one
+`transaction.atomic()` block. It validates the project map and players before
+creating anything, creates all territories and symmetric edges, chooses a
+random valid triple from all pairwise non-neighboring triples, randomly assigns
+it to the three active players, creates capitals with health 3, and changes
+the status to `active` last. Any error rolls back the current attempt; a
+pre-existing partial state is refused and is not repaired. Rounds are not
+created or changed.
+
+The database is SQLite in development (`backend/db.sqlite3`). SQLite provides
+transaction rollback, but its locking is database-wide and
+`select_for_update()` does not provide PostgreSQL-style row locks. A concurrent
+write may therefore be refused with `concurrent_access`; no partial attempt is
+committed. On a database with row-lock support, the game row lock ensures at
+most one successful initialization. The Game admin cannot edit status or
+timestamps, and GamePlayer admin changes are refused after activation.
