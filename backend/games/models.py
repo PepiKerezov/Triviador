@@ -6,12 +6,14 @@ from questions.models import AnswerOption, ChoiceQuestion, NumericQuestion
 
 
 WAITING = 'waiting'
+ACTIVE = 'active'
 IN_PROGRESS = 'in_progress'
 FINISHED = 'finished'
 CANCELLED = 'cancelled'
 
 STATUS_CHOICES = [
 	(WAITING, 'Waiting'),
+	(ACTIVE, 'Active'),
 	(IN_PROGRESS, 'In Progress'),
 	(FINISHED, 'Finished'),
 	(CANCELLED, 'Cancelled'),
