@@ -39,6 +39,16 @@ QUESTION_TYPE_CHOICES = [
 	(NUMERIC, 'Numeric'),
 ]
 
+RED = 'red'
+BLUE = 'blue'
+GREEN = 'green'
+
+PLAYER_COLOR_CHOICES = [
+	(RED, 'Red'),
+	(BLUE, 'Blue'),
+	(GREEN, 'Green'),
+]
+
 
 class Game(models.Model):
 	created_by = models.ForeignKey(
@@ -66,6 +76,7 @@ class GamePlayer(models.Model):
 		related_name='game_players',
 	)
 	player_order = models.PositiveSmallIntegerField()
+	color = models.CharField(max_length=20, choices=PLAYER_COLOR_CHOICES, default=RED)
 	score = models.IntegerField(default=0)
 	is_active = models.BooleanField(default=True)
 	joined_at = models.DateTimeField(auto_now_add=True)
@@ -81,6 +92,21 @@ class GamePlayer(models.Model):
 				fields=('game', 'player_order'),
 				name='unique_game_player_order',
 			),
+		]
+
+
+class MatchmakingEntry(models.Model):
+	user = models.OneToOneField(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name='matchmaking_entry',
+	)
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		ordering = ('created_at', 'pk')
+		indexes = [
+			models.Index(fields=('created_at',), name='matchmaking_created_at_idx'),
 		]
 
 

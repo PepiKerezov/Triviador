@@ -4,10 +4,22 @@ from itertools import combinations
 
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .map_definition import PROJECT_MAP, slug_for_name, validate_project_map
-from .models import ACTIVE, WAITING, Capital, Game, Territory
+from .models import (
+	ACTIVE,
+	BLUE,
+	GREEN,
+	RED,
+	WAITING,
+	Capital,
+	Game,
+	GamePlayer,
+	MatchmakingEntry,
+	Territory,
+)
 
 
 class GameInitializationError(ValidationError):
@@ -21,8 +33,80 @@ class InitializationResult:
 	capital_count: int
 
 
+class MatchmakingError(ValidationError):
+	"""A documented refusal to change matchmaking state."""
+
+
+@dataclass(frozen=True)
+class MatchmakingResult:
+	game_id: int | None
+	selected_user_ids: tuple[int, ...]
+
+
 def _refuse(message, code):
 	raise GameInitializationError(message, code=code)
+
+
+def _matchmaking_refuse(message, code):
+	raise MatchmakingError(message, code=code)
+
+
+def _eligible_matchmaking_entries():
+	return (
+		MatchmakingEntry.objects
+		.filter(
+			~Q(
+				user__game_players__game__status__in=(WAITING, ACTIVE)
+			)
+		)
+		.distinct()
+		.order_by('created_at', 'pk')
+	)
+
+
+def form_matchmaking_game():
+	with transaction.atomic():
+		entries = list(_eligible_matchmaking_entries().select_for_update())
+		if len(entries) < 3:
+			return MatchmakingResult(None, ())
+
+		selected = random.SystemRandom().sample(entries, 3)
+		game = Game.objects.create(created_by=selected[0].user, status=WAITING)
+		GamePlayer.objects.bulk_create(
+			[
+				GamePlayer(
+					game=game,
+					user=entry.user,
+					player_order=order,
+					color=color,
+					score=0,
+				)
+				for order, (entry, color) in enumerate(
+					zip(selected, (RED, BLUE, GREEN)),
+					start=1,
+				)
+			]
+		)
+		MatchmakingEntry.objects.filter(pk__in=[entry.pk for entry in selected]).delete()
+		return MatchmakingResult(game.id, tuple(entry.user_id for entry in selected))
+
+
+def join_matchmaking(user):
+	with transaction.atomic():
+		if MatchmakingEntry.objects.filter(user=user).exists():
+			_matchmaking_refuse('The user is already waiting for a game.', 'already_waiting')
+		if GamePlayer.objects.filter(
+			user=user,
+			game__status__in=(WAITING, ACTIVE),
+		).exists():
+			_matchmaking_refuse('The user is already participating in a game.', 'already_in_game')
+		MatchmakingEntry.objects.create(user=user)
+		return form_matchmaking_game()
+
+
+def leave_matchmaking(user):
+	with transaction.atomic():
+		MatchmakingEntry.objects.filter(user=user).delete()
 
 
 def _choose_capitals(territory_by_name):
