@@ -91,8 +91,8 @@ class GameInitializationTests(TestCase):
 			game=game,
 			number=1,
 			status='pending',
-			question_type='choice',
-			choice_question=self.question,
+			kind='city_capture',
+			required_places=1,
 		)
 		initialize_game(game.pk)
 

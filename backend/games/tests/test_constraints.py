@@ -2,7 +2,9 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 from django.test import TestCase
 
-from games.models import Game, GamePlayer, Round, RoundAnswer
+from django.utils import timezone
+
+from games.models import CITY_CAPTURE, Game, GamePlayer, Round, RoundAnswer, RoundQuestion
 from questions.models import AnswerOption, Category, ChoiceQuestion
 
 
@@ -35,11 +37,17 @@ class GameConstraintTests(TestCase):
 			player_order=1,
 		)
 		self.round = Round.objects.create(
+			game=self.game, number=1, kind=CITY_CAPTURE, required_places=1
+		)
+		self.round_question = RoundQuestion.objects.create(
+			round=self.round,
 			game=self.game,
-			number=1,
-			status='pending',
+			sequence=1,
 			question_type='choice',
 			choice_question=self.question,
+			text='Question',
+			first_place=1,
+			last_place=1,
 		)
 
 	def test_game_player_user_is_unique_per_game(self):
@@ -49,23 +57,38 @@ class GameConstraintTests(TestCase):
 	def test_round_number_is_unique_per_game(self):
 		with self.assertRaises(IntegrityError):
 			Round.objects.create(
-				game=self.game,
-				number=1,
-				status='pending',
-				question_type='choice',
-				choice_question=self.question,
+				game=self.game, number=1, kind=CITY_CAPTURE, required_places=1, status='completed',
+				completed_at=timezone.now(), outcome_reason='limit_reached',
 			)
 
 	def test_player_can_answer_round_only_once(self):
 		RoundAnswer.objects.create(
-			round=self.round,
+			question=self.round_question,
 			player=self.player,
 			selected_option=self.option,
+			is_correct=True,
+			submitted_at=timezone.now(),
 		)
 
 		with self.assertRaises(IntegrityError):
 			RoundAnswer.objects.create(
-				round=self.round,
+				question=self.round_question,
 				player=self.player,
 				selected_option=self.option,
+				is_correct=True,
+				submitted_at=timezone.now(),
+			)
+	def test_only_one_unfinished_round_per_game(self):
+		with self.assertRaises(IntegrityError):
+			Round.objects.create(game=self.game, number=2, kind=CITY_CAPTURE, required_places=1)
+
+	def test_bank_question_is_used_once_per_game(self):
+		round = Round.objects.create(
+			game=self.game, number=2, kind=CITY_CAPTURE, required_places=1, status='completed',
+			completed_at=timezone.now(), outcome_reason='limit_reached',
+		)
+		with self.assertRaises(IntegrityError):
+			RoundQuestion.objects.create(
+				round=round, game=self.game, sequence=1, question_type='choice',
+				choice_question=self.question, text='Question', first_place=1, last_place=1,
 			)

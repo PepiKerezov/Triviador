@@ -1,7 +1,17 @@
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 
-from .models import Capital, Game, GamePlayer, Round, RoundAnswer, Territory
+from .models import (
+	Capital,
+	CaptureRight,
+	Game,
+	GamePlayer,
+	Round,
+	RoundAnswer,
+	RoundQuestion,
+	ScoreEvent,
+	Territory,
+)
 
 
 @admin.register(Game)
@@ -25,16 +35,51 @@ class GamePlayerAdmin(admin.ModelAdmin):
 		super().save_model(request, obj, form, change)
 
 
+class ReadOnlyHistoryAdmin(admin.ModelAdmin):
+	"""Round history is written only by games.rounds / games.capture."""
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+
 @admin.register(Round)
-class RoundAdmin(admin.ModelAdmin):
-	list_display = ('game', 'number', 'status', 'question_type', 'started_at', 'finished_at')
-	list_filter = ('status', 'question_type')
+class RoundAdmin(ReadOnlyHistoryAdmin):
+	list_display = (
+		'game', 'number', 'kind', 'status', 'winner', 'outcome_reason', 'started_at', 'completed_at'
+	)
+	list_filter = ('status', 'kind', 'outcome_reason')
+
+
+@admin.register(RoundQuestion)
+class RoundQuestionAdmin(ReadOnlyHistoryAdmin):
+	list_display = ('round', 'sequence', 'question_type', 'status', 'started_at', 'deadline')
+	list_filter = ('question_type', 'status')
 
 
 @admin.register(RoundAnswer)
-class RoundAnswerAdmin(admin.ModelAdmin):
-	list_display = ('round', 'player', 'is_correct', 'points_awarded', 'submitted_at')
+class RoundAnswerAdmin(ReadOnlyHistoryAdmin):
+	list_display = ('question', 'player', 'numeric_value', 'selected_option', 'is_correct', 'submitted_at')
 	list_filter = ('is_correct',)
+
+
+@admin.register(CaptureRight)
+class CaptureRightAdmin(ReadOnlyHistoryAdmin):
+	list_display = ('round', 'player', 'order', 'allowed', 'used')
+
+
+@admin.register(ScoreEvent)
+class ScoreEventAdmin(ReadOnlyHistoryAdmin):
+	list_display = (
+		'round', 'player', 'kind', 'territory', 'points',
+		'player_score_before', 'player_score_after', 'calculation',
+	)
+	list_filter = ('kind',)
 
 
 @admin.register(Territory)
